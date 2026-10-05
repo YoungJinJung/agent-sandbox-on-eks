@@ -9,8 +9,8 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 | 수명주기 | agent-sandbox `SandboxClaim` + `shutdownTime` | Job + `ttlSecondsAfterFinished` |
 | 런타임 격리 | **EKS Fargate** (Pod마다 전용 microVM·커널) | EC2 + gVisor, EC2 + Kata |
 | AWS 권한 | **IRSA** (최소 권한 role) | EKS Pod Identity (Fargate 미지원) |
-| 네트워크 | **NAT 없는 격리 서브넷** + deny-by-default egress proxy | NetworkPolicy (Fargate 미지원) |
-| 관측 | CloudTrail, Route 53 Resolver Query Logs, proxy 로그 | eBPF 기반 syscall 관측 (Fargate·gVisor에서 전제가 약함) |
+| 네트워크 | `SecurityGroupPolicy` + AWS Network Firewall 도메인 allowlist + NAT | NetworkPolicy (Fargate 미지원) |
+| 관측 | CloudTrail, Route 53 Resolver Query Logs, Network Firewall 로그, VPC Flow Logs | eBPF 기반 syscall 관측 (Fargate·gVisor에서 전제가 약함) |
 
 ## 데모 시나리오
 
@@ -22,9 +22,9 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 
 1. `sts:GetCallerIdentity`: 권한이 없어도 성공하는 호출이며 CloudTrail에 남습니다.
 2. `s3:ListBuckets`: 최소 권한 role이라 `AccessDenied`가 나고, 이 역시 CloudTrail에 남습니다.
-3. proxy를 거쳐 `https://evil.example.com` 호출: allowlist에 없어 proxy가 거부하고 로그를 남깁니다.
-4. proxy를 무시한 직접 연결: 라우팅 경로가 없어 timeout이 납니다.
-5. `evil.example.com` DNS 조회: Resolver Query Logs에 남습니다.
+3. `https://evil.example.com` 호출: allowlist에 없어 Network Firewall이 거부하고 로그를 남깁니다.
+4. 허용된 외부 도메인 호출: 도메인 규칙을 통과하고 NAT를 통해 연결됩니다.
+5. `evil.example.com` DNS 조회: Resolver Query Logs에 남고, Route 53 DNS Firewall allowlist가 거부합니다.
 
 데모 결과는 `PASS/SAFE` 대신 **관측한 사실**로 출력합니다.
 
@@ -32,8 +32,9 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 Observed:
 - sts:GetCallerIdentity 호출
 - s3:ListBuckets AccessDenied
-- evil.example.com DNS 조회
-- 443/tcp 외부 연결 차단 (proxy deny)
+- evil.example.com DNS 쿼리 차단 (DNS Firewall)
+- allowlist 밖 HTTPS 연결 차단 (Network Firewall deny)
+- 허용된 도메인 HTTPS 연결 성공
 - Sandbox TTL 삭제 완료
 
 Not observed != safe
@@ -43,30 +44,15 @@ Not observed != safe
 
 ## 구성도
 
-```
-┌──────────────────────────── VPC ─────────────────────────────────────┐
-│                                                                      │
-│  private subnet (NAT 있음)             isolated subnet (NAT·IGW 없음)│
-│  ┌──────────── EKS EC2 node ───────┐   ┌──── EKS Fargate ──────────┐ │
-│  │ agent-sandbox controller        │   │ ns: sandbox               │ │
-│  │ sandbox-router ─────────────────┼──▶│  MCP server Pod (microVM) │ │
-│  │ egress proxy (deny-by-default)◀─┼───┤   ├─ IRSA: 최소 권한 role │ │
-│  │ CoreDNS                         │   │   ├─ read-only rootfs     │ │
-│  └───────────────┬─────────────────┘   │   ├─ CPU/memory limit     │ │
-│                  │ allowlist만         │   ├─ HTTPS_PROXY=proxy    │ │
-│                  ▼                     │   └─ shutdownTime (TTL)   │ │
-│              NAT → Internet            └──────────┬────────────────┘ │
-│                                                   │                  │
-│                          VPC endpoints: sts, ecr.api, ecr.dkr, s3    │
-└──────────────────────────────────────────────────────────────────────┘
-   관측: CloudTrail (AWS API) · Route 53 Resolver Query Logs (DNS) · proxy access log (egress)
+제안 아키텍처 (구현 전)
 
-Agent / Test Driver ──▶ sandbox-router ──▶ SandboxClaim ──▶ MCP server (Fargate)
-```
+![Agent Sandbox on Amazon EKS architecture](diagrams/agent-sandbox-eks.png)
+
+편집 가능한 AWS Diagram-as-Code 원본은 [agent-sandbox-eks.yaml](diagrams/agent-sandbox-eks.yaml)입니다. 각 AZ에 system private, Sandbox private, 전용 firewall, public egress 서브넷을 둡니다. AWS Network Firewall endpoint와 NAT를 AZ별로 배치하고, 두 endpoint에서 동일한 HTTPS allowlist를 적용합니다. Kyverno는 admission guardrail을 적용하고, `SecurityGroupPolicy`는 전용 SG를 Fargate Pod에 붙입니다. 내부 서비스의 SG도 Sandbox 접근을 허용하지 않도록 구성합니다. Kyverno가 생성한 NetworkPolicy는 Fargate 트래픽을 차단하지 않습니다.
 
 설계 원칙:
 
-- **통제와 관측을 분리합니다.** 외부 egress를 실제로 막는 것은 격리 서브넷의 라우팅(NAT 없음)입니다. proxy는 허용된 목적지로 가는 유일한 경로이자 관측 지점입니다. 악성 코드가 `HTTPS_PROXY`를 무시해도 나갈 경로가 없습니다.
+- **허용 목록으로 egress를 제한합니다.** Sandbox subnet의 외부 경로는 AZ별 AWS Network Firewall endpoint로 향하고, TLS SNI allowlist를 통과한 HTTPS만 NAT와 Internet Gateway를 통해 나갑니다. Route 53 DNS Firewall은 허용된 도메인의 질의만 통과시킵니다. 왕복 트래픽이 같은 firewall endpoint를 통과하도록 route table을 구성합니다. VPC 내부 `local` 경로는 egress firewall을 거치지 않으므로, 내부 서비스의 Security Group에서 sandbox 접근을 허용하지 않는지 별도로 검증합니다.
 - **Fargate 하나만 끝까지 구현합니다.** gVisor와 Kata는 비교표와 후속 실험으로 남깁니다.
 - **Warm Pool은 선택 사항입니다.** Fargate에서도 쓸 수 있지만, 대기 중인 Pod도 microVM 비용이 계속 나갑니다. 콜드 스타트 시간을 측정한 뒤 켤지 정합니다.
 
@@ -79,7 +65,7 @@ Agent / Test Driver ──▶ sandbox-router ──▶ SandboxClaim ──▶ MC
 | DaemonSet 불가 | 노드 기반 관측 에이전트를 쓸 수 없고 sidecar나 AWS 측 로그에 의존 |
 | RuntimeClass 선택 불가 | gVisor/Kata와 겹쳐 쓸 수 없음 |
 | privileged, hostNetwork 불가 | 샌드박스 입장에서는 장점 |
-| NetworkPolicy 미적용 | egress 통제를 서브넷 라우팅, SG, proxy로 해결해야 함 |
+| NetworkPolicy 미적용 | egress 통제를 서브넷 라우팅, SecurityGroupPolicy, AWS Network Firewall로 해결해야 함 |
 | Pod Identity 미지원 | IRSA 사용 |
 | 유휴 Warm Pool Pod도 과금 | 콜드 스타트 지연과 유휴 비용 중 하나를 골라야 함 |
 
@@ -100,5 +86,8 @@ Agent / Test Driver ──▶ sandbox-router ──▶ SandboxClaim ──▶ MC
 - [EKS Fargate considerations](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html)
 - [Security Groups for Pods with Fargate](https://docs.aws.amazon.com/eks/latest/best-practices/sgpp.html)
 - [VPC CNI network policy considerations](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html)
+- [AWS Network Firewall domain list rules](https://docs.aws.amazon.com/network-firewall/latest/developerguide/stateful-rule-groups-domain-names.html)
+- [AWS Network Firewall routing architectures](https://docs.aws.amazon.com/network-firewall/latest/developerguide/architectures.html)
+- [Route 53 Resolver DNS Firewall](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resolver-dns-firewall-overview.html)
 - [EKS Pod Identity restrictions](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html)
 - [EC2 nested virtualization](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html)
