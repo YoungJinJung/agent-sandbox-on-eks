@@ -1,0 +1,8 @@
+clusterName: agent-sandbox-demo
+awsRegion: ap-northeast-2
+image:
+  repository: REPLACED_BY_GITOPS_BRIDGE
+  tag: demo
+sandboxRoleArn: REPLACED_BY_GITOPS_BRIDGE
+sandboxSecurityGroupId: REPLACED_BY_GITOPS_BRIDGE
+routerSecurityGroupId: REPLACED_BY_GITOPS_BRIDGE

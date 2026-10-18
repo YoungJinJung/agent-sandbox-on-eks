@@ -10,7 +10,7 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 | 런타임 격리 | **EKS Fargate** (Pod마다 전용 microVM·커널) | EC2 + gVisor, EC2 + Kata |
 | AWS 권한 | **IRSA** (최소 권한 role) | EKS Pod Identity (Fargate 미지원) |
 | 네트워크 | `SecurityGroupPolicy` + AWS Network Firewall 도메인 allowlist + NAT | NetworkPolicy (Fargate 미지원) |
-| 관측 | CloudTrail, Route 53 Resolver Query Logs, Network Firewall 로그, VPC Flow Logs | eBPF 기반 syscall 관측 (Fargate·gVisor에서 전제가 약함) |
+| 관측 | CloudTrail, Fargate stdout/stderr, Route 53 Resolver Query Logs, Network Firewall 로그, VPC Flow Logs | eBPF 기반 syscall 관측 (Fargate·gVisor에서 전제가 약함) |
 
 ## 데모 시나리오
 
@@ -22,9 +22,9 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 
 1. `sts:GetCallerIdentity`: 권한이 없어도 성공하는 호출이며 CloudTrail에 남습니다.
 2. `s3:ListBuckets`: 최소 권한 role이라 `AccessDenied`가 나고, 이 역시 CloudTrail에 남습니다.
-3. `https://evil.example.com` 호출: allowlist에 없어 Network Firewall이 거부하고 로그를 남깁니다.
-4. 허용된 외부 도메인 호출: 도메인 규칙을 통과하고 NAT를 통해 연결됩니다.
-5. `evil.example.com` DNS 조회: Resolver Query Logs에 남고, Route 53 DNS Firewall allowlist가 거부합니다.
+3. `https://example.org` 호출: DNS는 허용하지만 TLS SNI가 HTTPS allowlist 밖이므로 Network Firewall이 거부합니다.
+4. `https://example.com` 호출: 허용된 TLS SNI로 NAT를 통해 연결됩니다.
+5. `evil.example.com` DNS 조회: Resolver Query Logs에 남고, Route 53 DNS Firewall이 거부합니다. 이 도메인으로 HTTPS를 시도하면 DNS 차단이 먼저 일어나므로 Network Firewall 동작은 `example.org`로 분리해 관찰합니다.
 
 데모 결과는 `PASS/SAFE` 대신 **관측한 사실**로 출력합니다.
 

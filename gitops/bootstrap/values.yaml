@@ -1,0 +1,10 @@
+cluster:
+  name: agent-sandbox-demo
+  caData: ""
+  region: ap-northeast-2
+  gitopsRepository: ""
+  sandboxImageRepository: ""
+  sandboxImageTag: demo
+  sandboxRoleArn: ""
+  sandboxSecurityGroupId: ""
+  routerSecurityGroupId: ""

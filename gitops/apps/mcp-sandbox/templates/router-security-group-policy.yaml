@@ -1,0 +1,14 @@
+apiVersion: vpcresources.k8s.aws/v1beta1
+kind: SecurityGroupPolicy
+metadata:
+  name: sandbox-router
+  namespace: agent-sandbox-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  podSelector:
+    matchLabels:
+      app: sandbox-router
+  securityGroups:
+    groupIds:
+      - {{ .Values.routerSecurityGroupId | quote }}

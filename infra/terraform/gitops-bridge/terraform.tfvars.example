@@ -1,0 +1,15 @@
+gitops_repository = "https://github.com/OWNER/agent-sandbox-on-eks.git"
+
+# Optional GitHub SSO. Set all three to enable Dex; the secret itself is created
+# in Kubernetes separately and must never be placed in Terraform variables/state.
+argocd_url             = "https://argocd.example.com"
+github_organization    = "YOUR_GITHUB_ORG"
+github_oauth_client_id = "YOUR_OAUTH_APP_CLIENT_ID"
+github_admin_team      = "platform-admins"
+github_viewer_team     = "platform-viewers"
+
+# Copy these outputs from ../cluster after its apply:
+mcp_image_repository      = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/agent-sandbox-demo/mcp-tools"
+sandbox_role_arn          = "arn:aws:iam::123456789012:role/agent-sandbox-demo-sandbox"
+sandbox_security_group_id = "sg-0123456789abcdef0"
+router_security_group_id  = "sg-0123456789abcdef1"

@@ -5,23 +5,23 @@
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
 | **M0. 결정** | 발표 시간, AWS 계정·리전, IaC 도구 확정 | 아래 "열린 질문" 해소 |
-| **M1. 인프라** | 2 AZ VPC, 각 AZ의 system private·sandbox private·Network Firewall·public egress 서브넷, VPC endpoints, EKS(EC2 노드그룹 + `sandbox` 네임스페이스 Fargate profile), OIDC provider | `make up` / `make down`으로 생성·삭제 가능 |
-| **M2. agent-sandbox** | 버전 고정 설치(`sandbox-with-extensions.yaml`), sandbox-router, `SandboxTemplate`(IRSA SA, read-only rootfs, resource limit), Fargate Pod `SecurityGroupPolicy` | `SandboxClaim` 생성 시 Fargate Pod가 뜨고 `shutdownTime` 이후 삭제됨 |
-| **M3. 악성 MCP 서버** | `summarize` 도구를 가장한 Python MCP 서버(streamable HTTP), ECR 푸시 | router를 거쳐 도구 호출 시 [데모 시나리오](architecture.md#데모-시나리오)의 1~5 동작 수행 |
-| **M4. 네트워크 통제·관측** | AWS Network Firewall HTTPS 도메인 allowlist + default deny, Route 53 DNS Firewall allowlist, NAT 경로, CloudTrail, Resolver Query Logs, VPC Flow Logs | 허용 도메인은 연결되고 차단 도메인·프로토콜은 거부되며 각 흐름이 로그에 남는 것을 확인 |
-| **M5. 데모 드라이버** | `demo/run.sh`: claim 생성, 도구 호출, 로그 수집, TTL 삭제 확인, `Observed:` 출력 | 한 번의 명령으로 재현 가능 |
+| **M1. 인프라** | 2 AZ VPC, 각 AZ의 system private·sandbox private·Network Firewall·public egress 서브넷, VPC endpoints, EKS Fargate profiles, OIDC provider | `infra/terraform/cluster` plan/apply 및 destroy 가능 |
+| **M2. agent-sandbox** | 버전 고정 설치(`sandbox-with-extensions.yaml`), sandbox-router, `SandboxTemplate`(IRSA SA, read-only rootfs, resource limit), Fargate Pod `SecurityGroupPolicy` | 임시 WarmPool에서 Claim을 할당하고 `shutdownTime` 이후 삭제 확인 |
+| **M3. MCP 서버** | `summarize`와 경계 점검 도구가 있는 Python MCP 서버(Streamable HTTP), ECR 이미지 | router를 통한 호출이 IAM·DNS·HTTPS 각 관측 결과를 출력 |
+| **M4. 네트워크 통제·관측** | AWS Network Firewall의 sandbox 전용 HTTPS SNI allowlist, Route 53 DNS Firewall, AZ별 NAT, CloudTrail, Resolver Query Logs, VPC Flow Logs | `example.com` 성공, `example.org` HTTPS 차단, `evil.example.com` DNS 차단을 각각 확인 |
+| **M5. 데모 드라이버** | `demo/run.sh`: 임시 pool/claim 생성, router 경유 MCP 호출, TTL 삭제 대기 | 기본 2분 TTL까지 한 번의 명령으로 재현 가능 |
 | **M6. 발표 자료** | draw.io 아키텍처 다이어그램, 런타임 비교, AgentCore vs EKS 선택 기준 | 슬라이드 초안 |
 
-예정 디렉터리 구조:
+현재 디렉터리 구조:
 
 ```
-infra/             # VPC, EKS, Fargate profile, IRSA, VPC endpoints, Network Firewall, 로그 설정
-k8s/
-  agent-sandbox/   # 버전 고정 설치 매니페스트, router
-  sandbox/         # SandboxTemplate, ServiceAccount(IRSA), (선택) SandboxWarmPool
-mcp/evil-server/   # 악성 MCP 서버 (Dockerfile, server.py)
-demo/              # run.sh, 관측 결과 수집
-docs/              # 비교표, AgentCore vs EKS, 발표 노트
+infra/terraform/cluster/       # AWS 기반 인프라와 관측
+infra/terraform/gitops-bridge/ # Argo CD 설치와 bridge Secret/ApplicationSet
+gitops/platform/               # Agent Sandbox controller, router
+gitops/apps/mcp-sandbox/       # IRSA, Pod SG policy, SandboxTemplate
+src/mcp_server/                # 제한된 동작을 가진 MCP 서버와 테스트
+demo/                          # 이미지 푸시, Claim 생성·호출·TTL 확인
+docs/                          # 아키텍처, 구현 계획, 발표 노트
 ```
 
 ## M1~M4에서 검증할 가정
@@ -37,4 +37,4 @@ docs/              # 비교표, AgentCore vs EKS, 발표 노트
 
 - 발표 시간(데모 구간 길이)
 - 사용할 AWS 계정과 리전, 기존 EKS 클러스터 재사용 여부
-- IaC 도구: Terraform(VPC·로그·EKS를 한 도구로) vs eksctl(EKS는 간단하지만 VPC·로그는 별도)
+- Terraform state를 팀 환경에서 사용할 때 remote backend와 lock을 별도로 구성합니다. 데모 root는 local state입니다.
