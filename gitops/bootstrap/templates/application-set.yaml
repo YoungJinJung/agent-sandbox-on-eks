@@ -1,0 +1,87 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: sandbox-platform
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            gitops-bridge: enabled
+  template:
+    metadata:
+      name: 'agent-sandbox-platform-{{ "{{index .metadata.annotations \"gitops-bridge/cluster-name\"}}" }}'
+      labels:
+        app.kubernetes.io/managed-by: argocd
+    spec:
+      project: default
+      source:
+        repoURL: '{{ "{{index .metadata.annotations \"gitops-bridge/repository-url\"}}" }}'
+        targetRevision: main
+        path: gitops/platform
+      destination:
+        server: '{{ "{{.server}}" }}'
+        namespace: agent-sandbox-system
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 10
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+        syncOptions:
+          - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: mcp-sandbox
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            gitops-bridge: enabled
+  template:
+    metadata:
+      name: 'mcp-sandbox-{{ "{{index .metadata.annotations \"gitops-bridge/cluster-name\"}}" }}'
+    spec:
+      project: sandbox-demo
+      source:
+        repoURL: '{{ "{{index .metadata.annotations \"gitops-bridge/repository-url\"}}" }}'
+        targetRevision: main
+        path: gitops/apps/mcp-sandbox
+        helm:
+          values: |
+            clusterName: '{{ "{{index .metadata.annotations \"gitops-bridge/cluster-name\"}}" }}'
+            awsRegion: '{{ "{{index .metadata.annotations \"gitops-bridge/aws-region\"}}" }}'
+            image:
+              repository: '{{ "{{index .metadata.annotations \"gitops-bridge/sandbox-image-repository\"}}" }}'
+              tag: '{{ "{{index .metadata.annotations \"gitops-bridge/sandbox-image-tag\"}}" }}'
+            sandboxRoleArn: '{{ "{{index .metadata.annotations \"gitops-bridge/sandbox-role-arn\"}}" }}'
+            sandboxSecurityGroupId: '{{ "{{index .metadata.annotations \"gitops-bridge/sandbox-security-group-id\"}}" }}'
+            routerSecurityGroupId: '{{ "{{index .metadata.annotations \"gitops-bridge/router-security-group-id\"}}" }}'
+      destination:
+        server: '{{ "{{.server}}" }}'
+        namespace: sandbox-demo
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 10
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+        syncOptions:
+          - CreateNamespace=true

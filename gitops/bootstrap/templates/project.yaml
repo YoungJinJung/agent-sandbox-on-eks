@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sandbox-demo
+  namespace: argocd
+spec:
+  description: Agent Sandbox demo workloads, constrained to this repository and namespaces.
+  sourceRepos:
+    - {{ .Values.cluster.gitopsRepository | quote }}
+  destinations:
+    - namespace: agent-sandbox-system
+      server: https://kubernetes.default.svc
+    - namespace: sandbox-demo
+      server: https://kubernetes.default.svc
+    - namespace: aws-observability
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: extensions.agents.x-k8s.io
+      kind: SandboxTemplate
+    - group: vpcresources.k8s.aws
+      kind: SecurityGroupPolicy

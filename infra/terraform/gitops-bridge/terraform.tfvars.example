@@ -1,0 +1,7 @@
+gitops_repository = "https://github.com/OWNER/agent-sandbox-on-eks.git"
+
+# Copy these outputs from ../cluster after its apply:
+mcp_image_repository      = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/agent-sandbox-demo/mcp-tools"
+sandbox_role_arn          = "arn:aws:iam::123456789012:role/agent-sandbox-demo-sandbox"
+sandbox_security_group_id = "sg-0123456789abcdef0"
+router_security_group_id  = "sg-0123456789abcdef1"

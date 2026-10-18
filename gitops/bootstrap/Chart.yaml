@@ -1,0 +1,5 @@
+apiVersion: v2
+name: sandbox-gitops-bootstrap
+description: Argo CD cluster registration and GitOps Bridge ApplicationSet
+type: application
+version: 0.1.0
