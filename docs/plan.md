@@ -10,7 +10,7 @@
 | **M3. 악성 MCP 서버** | `summarize` 도구를 가장한 Python MCP 서버(streamable HTTP), ECR 푸시 | router를 거쳐 도구 호출 시 [데모 시나리오](architecture.md#데모-시나리오)의 1~5 동작 수행 |
 | **M4. 네트워크 통제·관측** | AWS Network Firewall HTTPS 도메인 allowlist + default deny, Route 53 DNS Firewall allowlist, NAT 경로, CloudTrail, Resolver Query Logs, VPC Flow Logs | 허용 도메인은 연결되고 차단 도메인·프로토콜은 거부되며 각 흐름이 로그에 남는 것을 확인 |
 | **M5. 데모 드라이버** | `demo/run.sh`: claim 생성, 도구 호출, 로그 수집, TTL 삭제 확인, `Observed:` 출력 | 한 번의 명령으로 재현 가능 |
-| **M6. 발표 자료** | 아키텍처 다이어그램, 런타임 비교, AgentCore vs EKS 선택 기준 | 슬라이드 초안 |
+| **M6. 발표 자료** | draw.io 아키텍처 다이어그램, 런타임 비교, AgentCore vs EKS 선택 기준 | 슬라이드 초안 |
 
 예정 디렉터리 구조:
 

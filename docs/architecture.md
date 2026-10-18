@@ -46,9 +46,9 @@ Not observed != safe
 
 제안 아키텍처 (구현 전)
 
-![Agent Sandbox on Amazon EKS architecture](diagrams/agent-sandbox-eks.png)
+![Agent Sandbox on Amazon EKS architecture](diagrams/agent-sandbox-eks.drawio.png)
 
-편집 가능한 AWS Diagram-as-Code 원본은 [agent-sandbox-eks.yaml](diagrams/agent-sandbox-eks.yaml)입니다. 각 AZ에 system private, Sandbox private, 전용 firewall, public egress 서브넷을 둡니다. AWS Network Firewall endpoint와 NAT를 AZ별로 배치하고, 두 endpoint에서 동일한 HTTPS allowlist를 적용합니다. Kyverno는 admission guardrail을 적용하고, `SecurityGroupPolicy`는 전용 SG를 Fargate Pod에 붙입니다. 내부 서비스의 SG도 Sandbox 접근을 허용하지 않도록 구성합니다. Kyverno가 생성한 NetworkPolicy는 Fargate 트래픽을 차단하지 않습니다.
+편집 가능한 [draw.io 원본](diagrams/agent-sandbox-eks.drawio)과 [다이어그램 안내](diagrams/agent-sandbox-eks.md)입니다. 각 AZ에 system private, Sandbox private, 전용 firewall, public egress 서브넷을 둡니다. AWS Network Firewall endpoint와 NAT를 AZ별로 배치하고, 두 endpoint에서 동일한 HTTPS allowlist를 적용합니다. Kyverno는 admission guardrail을 적용하고, `SecurityGroupPolicy`는 전용 SG를 Fargate Pod에 붙입니다. 내부 서비스의 SG도 Sandbox 접근을 허용하지 않도록 구성합니다. Kyverno가 생성한 NetworkPolicy는 Fargate 트래픽을 차단하지 않습니다.
 
 설계 원칙:
 
