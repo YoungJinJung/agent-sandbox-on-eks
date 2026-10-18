@@ -1,3 +1,7 @@
+locals {
+  github_sso_enabled = var.argocd_url != "" && var.github_organization != "" && var.github_oauth_client_id != ""
+}
+
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
@@ -9,13 +13,48 @@ resource "helm_release" "argocd" {
   wait             = true
 
   values = [yamlencode({
-    dex           = { enabled = false }
+    dex = {
+      enabled = local.github_sso_enabled
+    }
     notifications = { enabled = false }
     "redis-ha"    = { enabled = false }
     controller    = { replicas = 1 }
     server = {
       replicas = 1
       service  = { type = "ClusterIP" }
+    }
+    configs = {
+      cm = local.github_sso_enabled ? {
+        url = var.argocd_url
+        "dex.config" = yamlencode({
+          connectors = [{
+            type = "github"
+            id   = "github"
+            name = "GitHub"
+            config = {
+              clientID     = var.github_oauth_client_id
+              clientSecret = "$argocd-github-sso:clientSecret"
+              orgs = [{
+                name  = var.github_organization
+                teams = compact([var.github_admin_team, var.github_viewer_team])
+              }]
+            }
+          }]
+        })
+      } : {}
+      rbac = {
+        scopes           = "[groups]"
+        "policy.default" = local.github_sso_enabled ? "role:readonly" : ""
+        "policy.csv" = local.github_sso_enabled ? join("\n", compact([
+          "p, role:readonly, applications, get, */*, allow",
+          "p, role:readonly, projects, get, *, allow",
+          "p, role:readonly, clusters, get, *, allow",
+          "p, role:readonly, repositories, get, *, allow",
+          "p, role:admin, *, *, *, allow",
+          var.github_admin_team != "" ? "g, ${var.github_organization}:${var.github_admin_team}, role:admin" : "",
+          var.github_viewer_team != "" ? "g, ${var.github_organization}:${var.github_viewer_team}, role:readonly" : ""
+        ])) : ""
+      }
     }
     repoServer     = { replicas = 1 }
     applicationSet = { replicas = 1 }
