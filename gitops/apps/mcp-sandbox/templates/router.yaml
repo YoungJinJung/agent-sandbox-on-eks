@@ -1,3 +1,4 @@
+{{- if .Values.installAccess }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -8,6 +9,8 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 automountServiceAccountToken: false
+{{- end }}
+{{- if .Values.installWorkload }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -83,3 +86,4 @@ spec:
     - name: http
       port: 8080
       targetPort: proxy
+{{- end }}

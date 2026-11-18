@@ -1,0 +1,1 @@
+{{ required "Pinned upstream manifest is required" .Values.manifest }}

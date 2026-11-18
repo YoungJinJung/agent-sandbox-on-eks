@@ -1,1 +1,6 @@
 cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"]
+
+# Presentation demo only. For production, set environment = "production"
+# and availability_zone_count = 3 (or more); the module default is 3.
+environment             = "demo"
+availability_zone_count = 2

@@ -1,0 +1,6 @@
+{{- if and .Values.installAccess .Values.createSandboxNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox-demo
+{{- end }}

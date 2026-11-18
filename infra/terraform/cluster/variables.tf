@@ -22,9 +22,20 @@ variable "cluster_version" {
 }
 
 variable "environment" {
-  description = "Environment tag."
+  description = "Environment tag. Only demo may use fewer than three Availability Zones."
   type        = string
   default     = "demo"
+}
+
+variable "availability_zone_count" {
+  description = "Number of Availability Zones. Defaults to three; two is allowed only for demo. Subnet CIDR groups reserve ten slots each."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.availability_zone_count >= 2 && var.availability_zone_count <= 10 && floor(var.availability_zone_count) == var.availability_zone_count
+    error_message = "availability_zone_count must be an integer between 2 and 10."
+  }
 }
 
 variable "project_name" {
@@ -46,12 +57,12 @@ variable "vpc_cidr" {
 }
 
 locals {
-  availability_zones = slice(data.aws_availability_zones.available.names, 0, 2)
+  availability_zones = slice(data.aws_availability_zones.available.names, 0, var.availability_zone_count)
 
-  public_subnet_cidrs   = [for index in range(2) : cidrsubnet(var.vpc_cidr, 8, index)]
-  system_subnet_cidrs   = [for index in range(2) : cidrsubnet(var.vpc_cidr, 8, index + 10)]
-  sandbox_subnet_cidrs  = [for index in range(2) : cidrsubnet(var.vpc_cidr, 8, index + 20)]
-  firewall_subnet_cidrs = [for index in range(2) : cidrsubnet(var.vpc_cidr, 8, index + 30)]
+  public_subnet_cidrs   = [for index in range(var.availability_zone_count) : cidrsubnet(var.vpc_cidr, 8, index)]
+  system_subnet_cidrs   = [for index in range(var.availability_zone_count) : cidrsubnet(var.vpc_cidr, 8, index + 10)]
+  sandbox_subnet_cidrs  = [for index in range(var.availability_zone_count) : cidrsubnet(var.vpc_cidr, 8, index + 20)]
+  firewall_subnet_cidrs = [for index in range(var.availability_zone_count) : cidrsubnet(var.vpc_cidr, 8, index + 30)]
 
   az_index = { for index, zone in local.availability_zones : zone => index }
 
@@ -80,6 +91,9 @@ locals {
     "*.githubusercontent.com",
     "registry.k8s.io",
     "*.registry.k8s.io",
+    # registry.k8s.io redirects image pulls to regional artifact registries.
+    "*.pkg.dev",
+    "googlecode.l.googleusercontent.com",
     "ghcr.io",
     "*.ghcr.io",
     "quay.io",

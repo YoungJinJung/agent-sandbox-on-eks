@@ -5,22 +5,24 @@
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
 | **M0. 결정** | 발표 시간, AWS 계정·리전, IaC 도구 확정 | 아래 "열린 질문" 해소 |
-| **M1. 인프라** | 2 AZ VPC, 각 AZ의 system private·sandbox private·Network Firewall·public egress 서브넷, VPC endpoints, EKS Fargate profiles, OIDC provider | `infra/terraform/cluster` plan/apply 및 destroy 가능 |
-| **M2. agent-sandbox** | 버전 고정 설치(`sandbox-with-extensions.yaml`), sandbox-router, `SandboxTemplate`(IRSA SA, read-only rootfs, resource limit), Fargate Pod `SecurityGroupPolicy` | 임시 WarmPool에서 Claim을 할당하고 `shutdownTime` 이후 삭제 확인 |
+| **M1. 인프라** | 운영 최소 3 AZ VPC (데모 2 AZ), 각 AZ의 system private·sandbox private·Network Firewall·public egress 서브넷, VPC endpoints, EKS Fargate profiles, OIDC provider | `infra/terraform/cluster` plan/apply 및 destroy 가능 |
+| **M2. agent-sandbox** | 버전 고정 설치(`sandbox-with-extensions.yaml`), sandbox-router, `SandboxTemplate`(IRSA SA, read-only rootfs, resource limit), Fargate Pod `SecurityGroupPolicy` | WarmPool에서 Claim 할당, 반환 후 Claim·Sandbox·해당 Pod 삭제 확인. 만료 동작은 별도 검증 |
 | **M3. MCP 서버** | `summarize`와 경계 점검 도구가 있는 Python MCP 서버(Streamable HTTP), ECR 이미지 | router를 통한 호출이 IAM·DNS·HTTPS 각 관측 결과를 출력 |
 | **M4. 네트워크 통제·관측** | AWS Network Firewall의 sandbox 전용 HTTPS SNI allowlist, Route 53 DNS Firewall, AZ별 NAT, CloudTrail, Resolver Query Logs, VPC Flow Logs | `example.com` 성공, `example.org` HTTPS 차단, `evil.example.com` DNS 차단을 각각 확인 |
-| **M5. 데모 드라이버** | `demo/run.sh`: 임시 pool/claim 생성, router 경유 MCP 호출, TTL 삭제 대기 | 기본 2분 TTL까지 한 번의 명령으로 재현 가능 |
-| **M6. 발표 자료** | draw.io 아키텍처 다이어그램, 런타임 비교, AgentCore vs EKS 선택 기준 | 슬라이드 초안 |
+| **M5. 데모 드라이버** | `demo/run.sh`: 사전 준비와 실행 분리, 실제 Pod·Node의 Fargate 검증, router 경유 MCP 호출, 단계별 관측·삭제 확인 | 약 2분 라이브·촬영 절차와 60초 발표 멘트 구분, 실패 시 정리, 실행 기록 기반 방화벽 로그 대조. 기본 5분 TTL은 반환 누락 대비 |
+| **M6. 발표 자료** | v20의 PDF 요약 요청 흐름, 운영 3 AZ draw.io, 20장의 60초 영상과 23장의 로그 대조 | 설명 24분 + 영상 1분 + Q&A 5분. [영상·자막·발표 멘트](../demo/README.md)와 Google Slides 재생본 연결 |
 
 현재 디렉터리 구조:
 
 ```
 infra/terraform/cluster/       # AWS 기반 인프라와 관측
 infra/terraform/gitops-bridge/ # Argo CD 설치와 bridge Secret/ApplicationSet
+infra/terraform/demo-workloads/ # 촬영용 Helm 배포·정리 (GitOps Bridge 대체 경로)
 gitops/platform/               # Agent Sandbox controller, router
 gitops/apps/mcp-sandbox/       # IRSA, Pod SG policy, SandboxTemplate
 src/mcp_server/                # 제한된 동작을 가진 MCP 서버와 테스트
-demo/                          # 이미지 푸시, Claim 생성·호출·TTL 확인
+demo/                          # 이미지 푸시, 사전 준비·4단계 시연·로그 대조·발표 멘트
+demo/media/                    # v20에서 쓰는 60초 MP4·SRT, 출처·재생 안내
 docs/                          # 아키텍처, 구현 계획, 발표 노트
 ```
 

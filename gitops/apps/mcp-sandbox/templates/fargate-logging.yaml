@@ -1,3 +1,4 @@
+{{- if .Values.installAccess }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -25,3 +26,4 @@ data:
         log_stream_prefix from-fluent-bit-
         log_retention_days 7
         auto_create_group false
+{{- end }}

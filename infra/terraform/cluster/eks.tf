@@ -177,6 +177,25 @@ resource "aws_security_group_rule" "sandbox_from_router" {
   to_port                  = 8000
 }
 
+# Fargate CoreDNS pods use the EKS primary group, not the module's additional
+# control-plane group. Allow DNS on the group that is actually on those ENIs.
+resource "aws_security_group_rule" "coredns_from_tools" {
+  for_each = {
+    sandbox_udp = { source = aws_security_group.sandbox.id, protocol = "udp" }
+    sandbox_tcp = { source = aws_security_group.sandbox.id, protocol = "tcp" }
+    router_udp  = { source = aws_security_group.router.id, protocol = "udp" }
+    router_tcp  = { source = aws_security_group.router.id, protocol = "tcp" }
+  }
+
+  description              = "DNS from ${each.key} to Fargate CoreDNS"
+  type                     = "ingress"
+  security_group_id        = module.eks.cluster_primary_security_group_id
+  source_security_group_id = each.value.source
+  protocol                 = each.value.protocol
+  from_port                = 53
+  to_port                  = 53
+}
+
 resource "aws_security_group_rule" "sandbox_from_control_plane" {
   description              = "EKS kubelet management traffic to Fargate sandbox pods"
   type                     = "ingress"
@@ -203,8 +222,8 @@ resource "aws_security_group_rule" "router_from_control_plane" {
   security_group_id        = aws_security_group.router.id
   source_security_group_id = module.eks.cluster_primary_security_group_id
   protocol                 = "tcp"
-  from_port                = 8080
-  to_port                  = 8080
+  from_port                = 10250
+  to_port                  = 10250
 }
 
 resource "aws_security_group_rule" "router_probe_from_control_plane" {

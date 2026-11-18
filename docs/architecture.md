@@ -14,14 +14,14 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 
 ## 데모 시나리오
 
-> 악성 MCP 서버가 제한된 AWS 역할을 쓰고 외부로 데이터를 보내려 한다
-> → AWS 호출은 CloudTrail에 남고, 외부 전송은 egress 정책이 막는다
-> → Sandbox는 TTL 이후 삭제된다.
+> 도구에 실행 환경을 할당하고 예시 텍스트를 전달한다
+> → 같은 환경에서 고정된 AWS·DNS·HTTPS 대상의 접근 결과를 점검한다
+> → Claim을 반환하고 Sandbox와 해당 Pod의 삭제를 확인한다.
 
-악성 MCP 서버는 평범한 도구(`summarize`)처럼 보이지만, 호출되면 다음을 시도합니다.
+`summarize`는 공백을 정리하고 앞 240자를 반환하는 부작용 없는 예시입니다. PDF 파싱이나 AI 요약은 구현하지 않습니다. 별도의 `check_sandbox_boundary` 호출이 다음을 시도하며 PDF 본문을 외부로 보내지 않습니다.
 
 1. `sts:GetCallerIdentity`: 권한이 없어도 성공하는 호출이며 CloudTrail에 남습니다.
-2. `s3:ListBuckets`: 최소 권한 role이라 `AccessDenied`가 나고, 이 역시 CloudTrail에 남습니다.
+2. `s3:ListBuckets`: 역할에 S3 허용 정책이 없고 S3 VPC Endpoint 정책도 이미지 레이어 읽기로 제한되어 있습니다. AccessDenied가 예상되지만 이 응답만으로 역할 정책 단독 효과나 CloudTrail 기록 여부를 단정하지 않습니다.
 3. `https://example.org` 호출: DNS는 허용하지만 TLS SNI가 HTTPS allowlist 밖이므로 Network Firewall이 거부합니다.
 4. `https://example.com` 호출: 허용된 TLS SNI로 NAT를 통해 연결됩니다.
 5. `evil.example.com` DNS 조회: Resolver Query Logs에 남고, Route 53 DNS Firewall이 거부합니다. 이 도메인으로 HTTPS를 시도하면 DNS 차단이 먼저 일어나므로 Network Firewall 동작은 `example.org`로 분리해 관찰합니다.
@@ -32,23 +32,27 @@ Agent Sandbox가 주는 것은 `Sandbox` / `SandboxTemplate` / `SandboxClaim` / 
 Observed:
 - sts:GetCallerIdentity 호출
 - s3:ListBuckets AccessDenied
-- evil.example.com DNS 쿼리 차단 (DNS Firewall)
-- allowlist 밖 HTTPS 연결 차단 (Network Firewall deny)
+- evil.example.com 이름 해석 실패 (원인은 DNS 로그와 대조)
+- allowlist 밖 HTTPS 연결 실패 (원인은 방화벽 로그와 대조)
 - 허용된 도메인 HTTPS 연결 성공
-- Sandbox TTL 삭제 완료
+- Claim 반환 후 Claim·Sandbox·해당 Pod 삭제 확인
 
 Not observed != safe
 ```
+
+라이브 시연·재촬영에서는 Warm Pool을 미리 준비하고 약 2분 동안 네 단계를 보여줍니다. v20 발표는 이 실제 실행 기록을 편집한 **60초 영상(20장)**을 사용하며, 23장에서 같은 Pod의 방화벽 로그를 대조합니다. TTL은 Claim 생성 시점부터 기본 5분이며 반환 누락 대비용입니다. [데모 실행과 발표 멘트](../demo/README.md)에 영상, 실제 로그 대조 방법과 실패 시 전환 멘트가 있습니다.
 
 **의도적으로 다루지 않는 것:** 미끼 파일 읽기 검출은 제외합니다. `readOnlyRootFilesystem`은 쓰기만 막고 읽기 증거는 남기지 않습니다. 읽기를 검출하려면 fanotify/audit, 파일 접근 중개 API, syscall 관측 같은 별도 계층이 필요하고, 이는 별도 연구 주제입니다.
 
 ## 구성도
 
+운영 설계 기준은 **최소 3개 AZ**입니다. Terraform의 AZ 수 기본값은 3이며, 발표 데모만 `environment = "demo"`, `availability_zone_count = 2`로 축소합니다. 아래 2개 AZ 그림은 데모 배치를 설명합니다. 운영에서는 같은 서브넷·방화벽·NAT 구성을 세 번째 AZ에도 배치합니다. 한 AZ 장애 후 나머지 두 AZ에서 처리할 수 있도록 Pod 분산과 여유 용량, 중단된 작업의 복구를 별도로 검증해야 합니다. AZ 수만으로 애플리케이션의 고가용성을 보장하지 않습니다.
+
 제안 아키텍처 (구현 전)
 
 ![Agent Sandbox on Amazon EKS architecture](diagrams/agent-sandbox-eks.drawio.png)
 
-편집 가능한 [draw.io 원본](diagrams/agent-sandbox-eks.drawio)과 [다이어그램 안내](diagrams/agent-sandbox-eks.md)입니다. 각 AZ에 system private, Sandbox private, 전용 firewall, public egress 서브넷을 둡니다. AWS Network Firewall endpoint와 NAT를 AZ별로 배치하고, 두 endpoint에서 동일한 HTTPS allowlist를 적용합니다. Kyverno는 admission guardrail을 적용하고, `SecurityGroupPolicy`는 전용 SG를 Fargate Pod에 붙입니다. 내부 서비스의 SG도 Sandbox 접근을 허용하지 않도록 구성합니다. Kyverno가 생성한 NetworkPolicy는 Fargate 트래픽을 차단하지 않습니다.
+편집 가능한 [draw.io 원본](diagrams/agent-sandbox-eks.drawio)과 [다이어그램 안내](diagrams/agent-sandbox-eks.md)입니다. 각 AZ에 system private, Sandbox private, 전용 firewall, public egress 서브넷을 둡니다. AWS Network Firewall endpoint와 NAT를 AZ별로 배치하고, 모든 endpoint에서 동일한 HTTPS allowlist를 적용합니다. Kyverno는 admission guardrail을 적용하고, `SecurityGroupPolicy`는 전용 SG를 Fargate Pod에 붙입니다. 내부 서비스의 SG도 Sandbox 접근을 허용하지 않도록 구성합니다. Kyverno가 생성한 NetworkPolicy는 Fargate 트래픽을 차단하지 않습니다.
 
 설계 원칙:
 

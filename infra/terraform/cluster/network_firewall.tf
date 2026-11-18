@@ -4,6 +4,10 @@ resource "aws_networkfirewall_rule_group" "sandbox_egress" {
   capacity = 100
 
   rule_group {
+    stateful_rule_options {
+      rule_order = "STRICT_ORDER"
+    }
+
     rule_variables {
       ip_sets {
         key = "SYSTEM_NETS"
@@ -19,7 +23,7 @@ resource "aws_networkfirewall_rule_group" "sandbox_egress" {
       rules_string = <<-EOT
         pass ip $SYSTEM_NETS any -> any any (msg:"trusted system egress"; sid:1000; rev:1;)
         pass tls $SANDBOX_NETS any -> any 443 (msg:"allow example.com"; tls.sni; content:"example.com"; startswith; endswith; nocase; sid:1100; rev:1;)
-        drop tls $SANDBOX_NETS any -> any 443 (msg:"deny non-allowlisted sandbox HTTPS"; tls.sni; sid:1199; rev:1;)
+        drop tls $SANDBOX_NETS any -> any 443 (msg:"deny non-allowlisted sandbox HTTPS"; tls.sni; pcre:"/./"; sid:1199; rev:1;)
       EOT
     }
   }
@@ -93,12 +97,12 @@ resource "aws_networkfirewall_logging_configuration" "egress" {
 
 resource "aws_route53_resolver_firewall_domain_list" "allowlist" {
   name    = "${var.cluster_name}-dns-allowlist"
-  domains = local.dns_allow_domains
+  domains = [for domain in local.dns_allow_domains : "${domain}."]
 }
 
 resource "aws_route53_resolver_firewall_domain_list" "default_deny" {
   name    = "${var.cluster_name}-dns-default-deny"
-  domains = ["*"]
+  domains = ["*."]
 }
 
 resource "aws_route53_resolver_firewall_rule_group" "egress" {
@@ -125,7 +129,7 @@ resource "aws_route53_resolver_firewall_rule" "deny_rest" {
 resource "aws_route53_resolver_firewall_rule_group_association" "vpc" {
   name                   = "${var.cluster_name}-dns-firewall"
   firewall_rule_group_id = aws_route53_resolver_firewall_rule_group.egress.id
-  priority               = 100
+  priority               = 101
   vpc_id                 = module.vpc.vpc_id
 }
 
