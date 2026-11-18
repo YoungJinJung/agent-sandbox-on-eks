@@ -1,5 +1,16 @@
 data "aws_availability_zones" "available" {
   state = "available"
+
+  lifecycle {
+    precondition {
+      condition     = var.environment == "demo" || var.availability_zone_count >= 3
+      error_message = "Non-demo environments require at least three Availability Zones."
+    }
+    postcondition {
+      condition     = length(self.names) >= var.availability_zone_count
+      error_message = "The selected region/account does not have enough available Availability Zones."
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -67,6 +78,21 @@ data "aws_iam_policy_document" "ecr_layer_access" {
     principals {
       type        = "*"
       identifiers = ["*"]
+    }
+  }
+  statement {
+    sid       = "AllowKubernetesRegistryLayersFromSystemSubnets"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::prod-registry-k8s-io-${var.aws_region}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "IpAddress"
+      variable = "aws:VpcSourceIp"
+      values   = local.system_subnet_cidrs
     }
   }
 }

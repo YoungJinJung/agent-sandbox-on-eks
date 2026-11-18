@@ -6,3 +6,8 @@ image:
 sandboxRoleArn: REPLACED_BY_GITOPS_BRIDGE
 sandboxSecurityGroupId: REPLACED_BY_GITOPS_BRIDGE
 routerSecurityGroupId: REPLACED_BY_GITOPS_BRIDGE
+
+# Terraform installs access resources before admitting any workload Pods.
+installAccess: true
+installWorkload: true
+createSandboxNamespace: false

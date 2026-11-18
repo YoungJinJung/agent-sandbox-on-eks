@@ -11,12 +11,15 @@ module "vpc" {
   database_subnets = local.sandbox_subnet_cidrs
   intra_subnets    = local.firewall_subnet_cidrs
 
-  create_igw                       = true
-  enable_nat_gateway               = false
-  create_private_nat_gateway_route = false
-  enable_dns_support               = true
-  enable_dns_hostnames             = true
-  map_public_ip_on_launch          = false
+  create_igw                          = true
+  enable_nat_gateway                  = false
+  create_private_nat_gateway_route    = false
+  create_multiple_public_route_tables = true
+  create_multiple_intra_route_tables  = true
+  create_database_subnet_route_table  = true
+  enable_dns_support                  = true
+  enable_dns_hostnames                = true
+  map_public_ip_on_launch             = false
 
   public_subnet_tags = {
     "kubernetes.io/role/elb" = "1"
@@ -89,19 +92,19 @@ resource "aws_security_group" "sandbox" {
   vpc_id      = module.vpc.vpc_id
 
   egress {
-    description = "DNS to CoreDNS service CIDR"
+    description = "DNS to CoreDNS pods in system subnets"
     protocol    = "udp"
     from_port   = 53
     to_port     = 53
-    cidr_blocks = [var.service_ipv4_cidr]
+    cidr_blocks = local.system_subnet_cidrs
   }
 
   egress {
-    description = "DNS over TCP to CoreDNS service CIDR"
+    description = "DNS over TCP to CoreDNS pods in system subnets"
     protocol    = "tcp"
     from_port   = 53
     to_port     = 53
-    cidr_blocks = [var.service_ipv4_cidr]
+    cidr_blocks = local.system_subnet_cidrs
   }
 
   egress {
@@ -121,19 +124,19 @@ resource "aws_security_group" "router" {
   vpc_id      = module.vpc.vpc_id
 
   egress {
-    description = "DNS to CoreDNS service CIDR"
+    description = "DNS to CoreDNS pods in system subnets"
     protocol    = "udp"
     from_port   = 53
     to_port     = 53
-    cidr_blocks = [var.service_ipv4_cidr]
+    cidr_blocks = local.system_subnet_cidrs
   }
 
   egress {
-    description = "DNS over TCP to CoreDNS service CIDR"
+    description = "DNS over TCP to CoreDNS pods in system subnets"
     protocol    = "tcp"
     from_port   = 53
     to_port     = 53
-    cidr_blocks = [var.service_ipv4_cidr]
+    cidr_blocks = local.system_subnet_cidrs
   }
 
   egress {
@@ -142,6 +145,14 @@ resource "aws_security_group" "router" {
     from_port       = 8000
     to_port         = 8000
     security_groups = [aws_security_group.sandbox.id]
+  }
+
+  egress {
+    description = "Fargate control plane and image registry HTTPS"
+    protocol    = "tcp"
+    from_port   = 443
+    to_port     = 443
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = { Name = "${var.cluster_name}-sandbox-router" }
@@ -203,6 +214,14 @@ resource "aws_security_group" "endpoint" {
     from_port       = 443
     to_port         = 443
     security_groups = [aws_security_group.sandbox.id]
+  }
+
+  ingress {
+    description     = "HTTPS from the Fargate router"
+    protocol        = "tcp"
+    from_port       = 443
+    to_port         = 443
+    security_groups = [aws_security_group.router.id]
   }
 
   ingress {
